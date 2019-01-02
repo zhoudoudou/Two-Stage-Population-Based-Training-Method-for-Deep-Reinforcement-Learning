@@ -145,11 +145,10 @@ task.put(task_init)
 update = 0
 while (1):
     while(result.qsize()!=1):
-        print("Now is the update is %d;the result num is :%d;the task num is :%d" % (update,result.qsize(),task.qsize()))
+        print("Now is the update is %d;the result length is :%d;the task length is :%d" % (update,result.qsize(),task.qsize()))
         time.sleep(2)
         if(result.qsize()==1):
-            print("the result num is :%d;the task num is :%d" % (result.qsize(), task.qsize()))
-            print("Now the result is full ,begin evolute")
+            print("the result length is :%d;the task length is :%d" % (result.qsize(), task.qsize()))
             break
     update += 1 # sgd update
     ev_value = evolution_signal(update)
