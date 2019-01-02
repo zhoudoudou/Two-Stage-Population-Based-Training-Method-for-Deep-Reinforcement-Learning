@@ -7,39 +7,19 @@ from collections import deque
 import numpy as np
 import csv
 import tensorflow as tf
+
 popsize=10 # popsize
+ev_agent_1 = deque(maxlen=2000) # windows size
 task_queue = queue.Queue(maxsize = popsize) # task queue;
 result_queue = queue.Queue(maxsize = popsize)# result queue
-# 记录文件
-out1 = open('ga_fitness_1.csv','a',newline='')
-csv_write1 = csv.writer(out1,dialect='excel') # use for plot
-out2 = open("ga_hyperpara_1.csv","a",newline='')
-csv_write2 = csv.writer(out2,dialect='excel')
-
-out3 = open('ga_fitness_2.csv','a',newline='')
-csv_write3 = csv.writer(out3,dialect='excel') # use for plot
-out4 = open("ga_hyperpara_2.csv","a",newline='')
-csv_write4 = csv.writer(out4,dialect='excel')
-
-out5 = open('ga_fitness_3.csv','a',newline='')
-csv_write5 = csv.writer(out5,dialect='excel') # use for plot
-out6 = open("ga_hyperpara_3.csv","a",newline='')
-csv_write6 = csv.writer(out6,dialect='excel')
-
-out7 = open('ga_fitness_4.csv','a',newline='')
-csv_write7 = csv.writer(out7,dialect='excel') # use for plot
-out8 = open("ga_hyperpara_4.csv","a",newline='')
-csv_write8 = csv.writer(out8,dialect='excel')
-
-out9 = open("ga_fitness_5.csv","a",newline='')
-csv_write9 = csv.writer(out9,dialect='excel')
-out10 = open("ga_hyperpara_5.csv","a",newline='')
-csv_write10 = csv.writer(out10,dialect='excel')
-#--------------------------------
-ev_agent_1 = deque(maxlen=2000) # windows size
-#---------------------------------
 
 def evolution_signal(update):
+    """
+    这是在TS-PBT第一阶段的执行函数,为了尽可能在分布式队列计算的框架下少做改动,
+    仍旧在PBT的大框架进行单个个体的训练，这一过程就是单个agent的强化学习过程
+    :param update: 
+    :return: 
+    """
     temp=[]
     temp.append(result.get())
     global_fitness = []
@@ -54,12 +34,6 @@ def evolution_signal(update):
     #print("the global_weight is:", global_weight)
     global_fitness = np.array(global_fitness)
     index = np.argsort(global_fitness)# return the min -> max index
-    csv_write1.writerow(temp[0]["episode_record"])# record the best episode
-    csv_write3.writerow(temp[0]["episode_record"])# record the best episode
-    csv_write5.writerow(temp[0]["episode_record"])# record the best episode
-    csv_write7.writerow(temp[0]["episode_record"])# record the best episode
-    csv_write9.writerow(temp[0]["episode_record"])# record the best episode
-
     ev_agent_1.extend(temp[0]["ev_record"])
     print("the ev is:",(sum(ev_agent_1))/len(ev_agent_1))
     print("the ev's length is:", len(ev_agent_1))
@@ -71,8 +45,13 @@ def evolution_signal(update):
     print("the task put ok")
     return (sum(ev_agent_1))/len(ev_agent_1)
 
-
-def PBT(update):
+def pbt(update):
+    """
+    pbt执行函数，此处我们优化6个DRL相关的超参数，具体参数baselines/baselines/a2c/a2c.py
+    我们在a2c的model类中，定义了一些新的管道和操作，这也是PBT的代码层级的核心所在，请仔细阅读相关代码
+    :param update: 
+    :return: 
+    """
     temp=[]
     for i in range(popsize):
         temp.append(result.get())
@@ -96,21 +75,8 @@ def PBT(update):
     #print("the global_weight is:", global_weight)
     global_fitness = np.array(global_fitness)
     index = np.argsort(global_fitness)# return the min -> max index
-    # record the fitness
-    csv_write1.writerow(temp[index[popsize-1]]["episode_record"])# record the best episode
-    csv_write3.writerow(temp[index[popsize-2]]["episode_record"])# record the best episode
-    csv_write5.writerow(temp[index[popsize-3]]["episode_record"])# record the best episode
-    csv_write7.writerow(temp[index[popsize-4]]["episode_record"])# record the best episode
-    csv_write9.writerow(temp[index[popsize-5]]["episode_record"])# record the best episode
-    # record the hyperparameter
-    csv_write2.writerow([temp[index[popsize-1]]["hyperpara_sgd"],temp[index[popsize-1]]["hyperpara_reward"]])
-    csv_write4.writerow([temp[index[popsize-2]]["hyperpara_sgd"],temp[index[popsize-2]]["hyperpara_reward"]])
-    csv_write6.writerow([temp[index[popsize-3]]["hyperpara_sgd"],temp[index[popsize-3]]["hyperpara_reward"]])
-    csv_write8.writerow([temp[index[popsize-4]]["hyperpara_sgd"],temp[index[popsize-4]]["hyperpara_reward"]])
-    csv_write10.writerow([temp[index[popsize-5]]["hyperpara_sgd"],temp[index[popsize-5]]["hyperpara_reward"]])
-
-    # new pbt operation
-    # deepcopy the weight and hyperpara
+    # pbt中后20%的个体是从前20%的个体中随机采样，由于我们的群体大小只有10，因此随机采样的意义不大
+    # 因此在实际操作中，直接复制top20%的个体替换后20%的个体
     temp[index[0]] = deepcopy(temp[index[popsize-1]])
     temp[index[1]] = deepcopy(temp[index[popsize-2]])
     # tuning ent_coef, vf_coef, lr_coef
@@ -130,8 +96,6 @@ def PBT(update):
                 temp[index[i]]['hyperpara_sgd'][3] = 0.99
             else:
                 pass
-
-
     # tuning nsteps
     for i in range(2):
         if random.random() <= 0.5:
@@ -142,7 +106,6 @@ def PBT(update):
                 temp[index[i]]["hyperpara_reward"][0] = 5
             else:
                 pass
-
     # tuning gamma
     for i in range(2):
         if random.random() <= 0.5:
@@ -153,7 +116,6 @@ def PBT(update):
                 temp[index[i]]["hyperpara_reward"][1] = 0.99
             else:
                 pass
-
     # print new hyperpara
     new_global_hyperpara = []
     for i in range(popsize):
@@ -176,22 +138,10 @@ manager.start()
 # 获得通过网络访问的Queue对象:
 task = manager.master_task()
 result = manager.worker_result()
-
-
 task_init=[]
 task.put(task_init)
 
-# # 2000 moving_average,20 times
-# for update in range(20):
-#     while(result.qsize()!=1):
-#         print("Now is the update is %d;the result num is :%d;the task num is :%d" % (update,result_signal.qsize(),task_signal.qsize()))
-#         time.sleep(2)
-#         if(result.qsize()==1):
-#             print("the result num is :%d;the task num is :%d" % (result_signal.qsize(), task_signal.qsize()))
-#             print("Now the result is full ,begin evolute")
-#             break
-#     evolution_signal(update)
-
+# 进行第一个阶段的单agent的训练（单纯的单个体的强化学习过程）
 update = 0
 while (1):
     while(result.qsize()!=1):
@@ -203,23 +153,26 @@ while (1):
             break
     update += 1 # sgd update
     ev_value = evolution_signal(update)
-
     if update > 20 and ev_value > 0.95:
         break
+# 完成第一阶段的预训练
 
-
+# 开始第二阶段的PBT训练
+# 计算剩余计算代价,本实验室中单个个体的计算代价是40M，因此总计算代价是400M.
+# 在PBT阶段，每个个体会在完成800000的step后，完成当前超参数，配置下的训练，将结果压入result队列
 rest = int(((10*40000000-(update)*800000)/10)/800000)
-
+# 进行PBT训练
 for i in range(rest):
     while(~result.full()):
-        print("rest is:", rest)
-        print("Now is the update is %d;the result num is :%d;the task num is :%d" % (i,result.qsize(),task.qsize()))
+        print("Now is the update is %d;the result length is :%d;the task length is :%d" % (i,result.qsize(),task.qsize()))
         time.sleep(2)
         if(result.full()):
-            print("the result num is :%d;the task num is :%d" % (result.qsize(), task.qsize()))
+            print("the result length is :%d;the task length is :%d" % (result.qsize(), task.qsize()))
             print("Now the result is full ,begin evolute")
             break
-    PBT(rest)
+    # 任务队列中的10个个体已经全部训练完成，并压入result队列中
+    # 执行PBT操作
+    pbt(rest)
 
 manager.shutdown()
 print('master exit.')
